@@ -71,6 +71,19 @@ stats = {
     "last_latency": 0,  # 添加延迟记录
 }
 
+# 添加一个更高级的输出函数，确保每次输出时清除上一行并显示新内容
+last_message_length = 0
+
+def print_status_line(message):
+    """打印状态行，确保每次都清除前一行并正确换行"""
+    global last_message_length
+    # 清除前一行（使用退格字符）
+    print('\r' + ' ' * last_message_length, end='\r')
+    # 打印新消息
+    print(message, end='')
+    # 更新消息长度
+    last_message_length = len(message)
+
 def print_stats():
     """打印当前统计信息"""
     # 计算失败率
@@ -83,10 +96,12 @@ def print_stats():
 
     # 检查队列是否为空
     if request_queue.qsize() == 0 and stats["current_processing"] == 0 and stats["total_requests"] > 0:
-        print(f"{Fore.GREEN}[*] All pending requests have been scanned{Style.RESET_ALL}")
+        message = f"{Fore.GREEN}[*] All pending requests have been scanned{Style.RESET_ALL}"
+        print_status_line(message)
     else:
         # 单行显示统计信息
-        print(f"{Fore.CYAN}[*] scanned: {stats['completed_requests']}, pending: {request_queue.qsize()}, requestSent: {stats['total_requests']}, latency: {latency:.2f}ms, failedRatio: {failed_ratio:.2f}%{Style.RESET_ALL}")
+        message = f"{Fore.CYAN}[*] scanned: {stats['completed_requests']}, pending: {request_queue.qsize()}, requestSent: {stats['total_requests']}, latency: {latency:.2f}ms, failedRatio: {failed_ratio:.2f}%{Style.RESET_ALL}\n"
+        print_status_line(message)
 
 def generate_request_hash(flow: http.HTTPFlow) -> str:
     raw = f"{flow.request.method} {flow.request.url}\n"
