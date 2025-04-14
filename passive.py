@@ -67,18 +67,26 @@ stats = {
     "skipped_requests": 0,
     "failed_requests": 0,
     "current_processing": 0,
-    "start_time": time.time()
+    "start_time": time.time(),  # 添加开始时间
+    "last_latency": 0,  # 添加延迟记录
 }
 
 def print_stats():
     """打印当前统计信息"""
-    current_time = time.time()
-    elapsed_time = current_time - stats["start_time"]
-    pending = stats["total_requests"] - stats["completed_requests"] - stats["skipped_requests"] - stats["failed_requests"]
-    failed_ratio = (stats["failed_requests"] / stats["total_requests"] * 100) if stats["total_requests"] > 0 else 0
-    
-    print(f"\n{Fore.CYAN}[*] All pending requests have been scanned{Style.RESET_ALL}")
-    print(f"{Fore.GREEN}[*] scanned: {stats['completed_requests']}, pending: {pending}, requestSent: {stats['total_requests']}, latency: {elapsed_time:.2f}s, failedRatio: {failed_ratio:.2f}%{Style.RESET_ALL}")
+    # 计算失败率
+    failed_ratio = 0
+    if stats["total_requests"] > 0:
+        failed_ratio = (stats["failed_requests"] / stats["total_requests"]) * 100
+
+    # 计算平均延迟（简化版，实际使用中可能需要更复杂的延迟计算）
+    latency = stats["last_latency"]
+
+    # 检查队列是否为空
+    if request_queue.qsize() == 0 and stats["current_processing"] == 0 and stats["total_requests"] > 0:
+        print(f"{Fore.GREEN}[*] All pending requests have been scanned{Style.RESET_ALL}")
+    else:
+        # 单行显示统计信息
+        print(f"{Fore.CYAN}[*] scanned: {stats['completed_requests']}, pending: {request_queue.qsize()}, requestSent: {stats['total_requests']}, latency: {latency:.2f}ms, failedRatio: {failed_ratio:.2f}%{Style.RESET_ALL}")
 
 def generate_request_hash(flow: http.HTTPFlow) -> str:
     raw = f"{flow.request.method} {flow.request.url}\n"
@@ -106,7 +114,9 @@ class SqlmapWorker(threading.Thread):
                 break
             tmp_file_path, scheme = item
             stats["current_processing"] += 1
-            
+            start_time = time.time()
+            print_stats()
+
             force_ssl_param = "--force-ssl" if scheme.lower() == "https" else ""
             sqlmap_cmd = [
                 SQLMAP_PYTHON,
@@ -132,7 +142,10 @@ class SqlmapWorker(threading.Thread):
                 logging.error(f"sqlmap 执行失败: {e}")
                 stats["failed_requests"] += 1
             finally:
+                end_time = time.time()
+                stats["last_latency"] = (end_time - start_time) * 1000  # 转换为毫秒
                 stats["current_processing"] -= 1
+                print_stats()
                 request_queue.task_done()
 
 worker_thread = SqlmapWorker(daemon=True)
@@ -144,12 +157,16 @@ class SaveAndTrigger:
         # 通过修改log的级别来避免显示这些信息
         logging.getLogger('mitmproxy').setLevel(logging.CRITICAL)
 
+        start_time = time.time()
         stats["total_requests"] += 1
         request_hash = generate_request_hash(flow)
 
         if request_hash in seen_requests:
             logging.info(f"跳过重复请求: {flow.request.url}")
             stats["skipped_requests"] += 1
+            end_time = time.time()
+            stats["last_latency"] = (end_time - start_time) * 1000  # 转换为毫秒
+            print_stats()
             flow.response = http.Response.make(
                 200,
                 b"Duplicate request skipped.",
@@ -179,7 +196,10 @@ class SaveAndTrigger:
             f.write(request_text)
 
         request_queue.put((tmp_file_path, flow.request.scheme))
+        end_time = time.time()
+        stats["last_latency"] = (end_time - start_time) * 1000  # 转换为毫秒
         logging.info(f"加入扫描队列: {flow.request.method} {flow.request.url} -> {tmp_file_path}")
+        print_stats()
 
         # 阻止请求继续转发到服务器
         flow.response = http.Response.make(
