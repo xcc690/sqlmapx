@@ -96,7 +96,7 @@ def print_stats():
 
     # 检查队列是否为空
     if request_queue.qsize() == 0 and stats["current_processing"] == 0 and stats["total_requests"] > 0:
-        message = f"{Fore.GREEN}[*] All pending requests have been scanned{Style.RESET_ALL}"
+        message = f"{Fore.GREEN}[*] All pending requests have been scanned{Style.RESET_ALL}\n"
         print_status_line(message)
     else:
         # 单行显示统计信息
