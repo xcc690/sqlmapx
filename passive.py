@@ -148,6 +148,7 @@ class SqlmapWorker(threading.Thread):
                 sqlmap_cmd.insert(6, force_ssl_param)
 
             logging.info(f"执行 sqlmap 命令: {' '.join(sqlmap_cmd)}")
+            print(sqlmap_cmd)
             try:
                 proc = subprocess.Popen(sqlmap_cmd)
                 sqlmap_processes.append(proc)
